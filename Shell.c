@@ -12,35 +12,30 @@
 #define MAX_ARGS 128
 #define MAX_CMDS 32
 
-// Reap terminated background child processes to prevent zombies
 void handle_sigchld(int sig) {
     (void)sig;
     int saved_errno = errno;
     while (waitpid(-1, NULL, WNOHANG) > 0) {
-        // Reaped a background process
+        
     }
     errno = saved_errno;
 }
 
-// Configure signal handlers for the parent shell
 void setup_signals() {
     struct sigaction sa_ign, sa_chld;
 
-    // Ignore CTRL+C (SIGINT) and CTRL+Z (SIGTSTP) in the parent shell
     sa_ign.sa_handler = SIG_IGN;
     sigemptyset(&sa_ign.sa_mask);
     sa_ign.sa_flags = 0;
     sigaction(SIGINT, &sa_ign, NULL);
     sigaction(SIGTSTP, &sa_ign, NULL);
 
-    // Reap background children asynchronously via SIGCHLD
     sa_chld.sa_handler = handle_sigchld;
     sigemptyset(&sa_chld.sa_mask);
     sa_chld.sa_flags = SA_RESTART | SA_NOCLDSTOP;
     sigaction(SIGCHLD, &sa_chld, NULL);
 }
 
-// Restore default signal behavior inside child processes
 void reset_child_signals() {
     struct sigaction sa_dfl;
     sa_dfl.sa_handler = SIG_DFL;
@@ -50,7 +45,6 @@ void reset_child_signals() {
     sigaction(SIGTSTP, &sa_dfl, NULL);
 }
 
-// Tokenize input line, handling quoted strings (e.g., grep "main" file.c)
 int tokenize(char *input, char **tokens) {
     int count = 0;
     char *p = input;
@@ -74,7 +68,6 @@ int tokenize(char *input, char **tokens) {
     return count;
 }
 
-// Handle built-in commands directly in the parent process
 int handle_builtin(char **args) {
     if (args[0] == NULL) return 1;
 
@@ -112,6 +105,48 @@ int handle_builtin(char **args) {
         return 1;
     }
 
-    return 0; // Not a built-in
+    return 0; 
 }
 
+void apply_redirection(char **args) {
+    char *clean_args[MAX_ARGS];
+    int j = 0;
+
+    for (int i = 0; args[i] != NULL; i++) {
+        if (strcmp(args[i], "<") == 0 && args[i + 1] != NULL) {
+            int fd = open(args[++i], O_RDONLY);
+            if (fd < 0) {
+                perror("open input");
+                exit(1);
+            }
+            dup2(fd, STDIN_FILENO);
+            close(fd);
+        } else if (strcmp(args[i], ">") == 0 && args[i + 1] != NULL) {
+            int fd = open(args[++i], O_WRONLY | O_CREAT | O_TRUNC, 0644);
+            if (fd < 0) {
+                perror("open output");
+                exit(1);
+            }
+            dup2(fd, STDOUT_FILENO);
+            close(fd);
+        } else if (strcmp(args[i], ">>") == 0 && args[i + 1] != NULL) {
+            int fd = open(args[++i], O_WRONLY | O_CREAT | O_APPEND, 0644);
+            if (fd < 0) {
+                perror("open append");
+                exit(1);
+            }
+            dup2(fd, STDOUT_FILENO);
+            close(fd);
+        } else {
+            clean_args[j++] = args[i];
+        }
+    }
+    clean_args[j] = NULL;
+
+    for (int i = 0; i <= j; i++) {
+        args[i] = clean_args[i];
+    }
+}
+
+/* si no estoy mal de momneto tiene  la parte del signal handelin, lo del built in comand y el  redirection, creo que esta bien 
+faltaria el execution, pipas y background, se puede jajajaja igualmente mi nigga cualquier cosa escribame sin pena*/
